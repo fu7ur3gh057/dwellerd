@@ -129,6 +129,6 @@ async def cb_admin_hint(cb: CallbackQuery) -> None:
             "Admin-команды (текстовые):\n"
             "<code>/run &lt;check&gt;</code>\n"
             "<code>/restart &lt;project&gt; [service]</code>\n"
-            "<code>/start &lt;project&gt;</code>  ·  <code>/stop &lt;project&gt;</code>\n"
+            "<code>/up &lt;project&gt;</code>  ·  <code>/down &lt;project&gt;</code>\n"
             "<code>/notify_test [type]</code>"
         )

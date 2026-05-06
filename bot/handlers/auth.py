@@ -18,6 +18,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
 from ..auth import revoke_session, start_session, verify_credentials
+from ..commands import reset_commands, set_user_commands
 from ..states.auth import Login
 
 
@@ -95,6 +96,14 @@ async def login_password(message: Message, state: FSMContext) -> None:
     else:
         start_session(message.from_user.id, user)
 
+    # Refresh the per-chat command list so `/` autocomplete reflects the
+    # new user's role. Errors are non-fatal — the chat just keeps showing
+    # the GUEST defaults.
+    await set_user_commands(
+        message.bot, message.chat.id,
+        is_admin=(user.role == "admin"),
+    )
+
     rest_note = "" if rest else "\n<i>(web API не запущен — команды действий недоступны)</i>"
     await message.answer(
         f"✅ Привет, <b>{user.username}</b>!\n"
@@ -117,7 +126,10 @@ async def cmd_logout(message: Message, state: FSMContext) -> None:
     if message.from_user is None:
         return
     await state.clear()
-    if revoke_session(message.from_user.id):
+    revoked = revoke_session(message.from_user.id)
+    # Drop the per-chat command override so `/` falls back to GUEST.
+    await reset_commands(message.bot, message.chat.id)
+    if revoked:
         await message.answer("Вышел из аккаунта. /login чтобы войти снова.")
     else:
         await message.answer("Ты не залогинен.")

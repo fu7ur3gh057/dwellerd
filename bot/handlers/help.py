@@ -57,7 +57,7 @@ async def cmd_help(message: Message, current_user=None) -> None:
             "<b>Админ</b>\n"
             "/run &lt;name&gt; — триггернуть проверку прямо сейчас\n"
             "/restart &lt;project&gt; [service] — перезапустить compose\n"
-            "/start &lt;project&gt;  ·  /stop &lt;project&gt;\n"
+            "/up &lt;project&gt;  ·  /down &lt;project&gt; — старт/стоп compose\n"
             "/notify_test [type] — пробное уведомление\n"
         )
 

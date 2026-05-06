@@ -16,6 +16,7 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
 
+from .commands import set_default_commands
 from .config import load_config
 from .db import init_db
 from .dispatch import run_dispatcher
@@ -57,6 +58,11 @@ async def run() -> None:
 
     me = await bot.get_me()
     log.info("bot ready: @%s (id=%s)", me.username, me.id)
+
+    # Register the guest-visible command list so `/` shows /start /login /help
+    # to anyone who hasn't logged in. Per-chat overrides are applied by the
+    # auth handler on /login success and cleared on /logout.
+    await set_default_commands(bot)
 
     # Background fan-out: poll DB tables, push new alerts/logs/checks to
     # subscribed TG users. Runs alongside polling, cancelled on shutdown.

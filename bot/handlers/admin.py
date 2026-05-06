@@ -24,7 +24,17 @@ router = Router(name=__name__)
 log = logging.getLogger(__name__)
 
 
-_ALLOWED_DOCKER_ACTIONS = {"up", "down", "restart", "stop", "start", "pull"}
+_ALLOWED_DOCKER_ACTIONS = {"up", "down", "restart", "pull"}
+
+# Map TG command name → docker compose action. /up and /down are the
+# command names operators type; we proxy them to the daemon's existing
+# `up`/`down` REST actions. /start was avoided to not clash with the
+# greeting `/start` handler.
+_COMMAND_TO_ACTION = {
+    "restart": "restart",
+    "up": "up",
+    "down": "down",
+}
 
 
 def _format_error(e: Exception) -> str:
@@ -66,21 +76,21 @@ async def cmd_run(message: Message, command: CommandObject) -> None:
 # ── /restart <project> [service] ──────────────────────────────────────────
 
 
-@router.message(IsAdmin(), Command("restart", "start", "stop"))
+@router.message(IsAdmin(), Command("restart", "up", "down"))
 async def cmd_compose(message: Message, command: CommandObject) -> None:
-    """Routes /restart, /start, /stop to compose actions.
-    Format: `/<action> <project> [service]`
+    """Routes /restart, /up, /down to compose actions on the daemon.
+    Format: `/<command> <project> [service]`
     """
-    action = command.command  # "restart" / "start" / "stop"
-    if action not in _ALLOWED_DOCKER_ACTIONS:
-        return  # shouldn't reach here
+    action = _COMMAND_TO_ACTION.get(command.command)
+    if action is None:
+        return  # shouldn't reach here — Command filter gates the names
 
     parts = (command.args or "").split()
     if not parts:
         await message.answer(
             f"Использование:\n"
-            f"<code>/{action} &lt;project&gt;</code> — действие на проект\n"
-            f"<code>/{action} &lt;project&gt; &lt;service&gt;</code> — на конкретный контейнер"
+            f"<code>/{command.command} &lt;project&gt;</code> — действие на проект\n"
+            f"<code>/{command.command} &lt;project&gt; &lt;service&gt;</code> — на конкретный контейнер"
         )
         return
 
@@ -129,7 +139,7 @@ async def cmd_notify_test(message: Message, command: CommandObject) -> None:
 # inverse filter.
 
 
-@router.message(Command("run", "restart", "start", "stop", "notify_test"))
+@router.message(Command("run", "restart", "up", "down", "notify_test"))
 async def cmd_admin_only(message: Message, current_user=None) -> None:
     if current_user is None:
         return  # AuthMiddleware would have already nudged
