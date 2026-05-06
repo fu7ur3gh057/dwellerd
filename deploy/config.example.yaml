@@ -1,0 +1,108 @@
+# Dwellerd config (full schema after Phase 3).
+#
+# Path conventions:
+#   Production install (systemd):
+#     config:    /etc/dwellerd/config.yaml      (root:dwellerd 640)
+#     data_dir:  /var/lib/dwellerd/data         (dwellerd:dwellerd 750)
+#     logs_dir:  /var/lib/dwellerd/logs         (dwellerd:dwellerd 750)
+#   Dev mode (`make run` from your shell):
+#     config:    ./config.yaml
+#     data_dir:  ./data
+#     logs_dir:  ./logs
+#
+# After first boot, the YAML's notifiers/checks/report/logs blocks are
+# imported into the SQLite `settings` table and become editable via the
+# admin UI. The YAML stays as the boot-time seed + escape hatch (db.path,
+# web.host/port/jwt/prefix). Boot-only sections never sync back from the DB.
+
+notifiers: []
+  # - type: telegram
+  #   bot_token: "123456:ABC..."
+  #   chat_id: "-100..."
+  #   lang: ru          # ru | en
+
+checks: []
+  # - type: cpu
+  #   name: cpu
+  #   interval: 60
+  #   warn_pct: 80
+  #   crit_pct: 90
+  # - type: memory
+  #   name: memory
+  #   interval: 60
+  #   warn_pct: 80
+  #   crit_pct: 90
+  # - type: disk
+  #   name: disk-root
+  #   interval: 60
+  #   path: /
+  #   warn_pct: 80
+  #   crit_pct: 90
+  # - type: http
+  #   name: api-health
+  #   interval: 60
+  #   url: https://example.com/health
+  #   expect_status: 200
+  # - type: systemd
+  #   name: nginx
+  #   interval: 60
+  #   unit: nginx.service
+
+# Periodic system-status digest. Disabled when absent.
+# report:
+#   interval: 2700                    # full digest every 45 min
+#   hostname: my-server
+#   notifier: telegram
+#   host:
+#     memory: {}
+#     swap: {}
+#     cpu: {}
+#     disks: { paths: ["/"] }
+#     net:   { interfaces: [eth0] }
+#   docker:
+#     - compose: /opt/myapp/docker-compose.yaml
+#       containers: [app, db]
+#       starred: [app]
+
+# Log streaming with dedup. Disabled when absent.
+# logs:
+#   notifier: telegram
+#   notify: true                      # set false to keep logs DB-only (no Telegram blast)
+#   digest_interval: 3600
+#   storage:
+#     retention_days: 30              # bound the log_events table
+#     max_rows: 1_000_000
+#   sources:
+#     - type: file
+#       name: nginx-error
+#       path: /var/log/nginx/error.log
+#       pattern: ".+"
+#     - type: docker
+#       name: app
+#       compose: /opt/myapp/docker-compose.yaml
+#       service: app
+#       pattern: "ERROR|CRITICAL|Traceback"
+#     - type: journal
+#       name: nginx-systemd
+#       unit: nginx.service
+#       pattern: "(?i)error|warn"
+
+# SQLite path override. Default: <data_dir>/dwellerd.sqlite — auto-resolves
+# to /var/lib/dwellerd/data/dwellerd.sqlite when config is in /etc/dwellerd/,
+# or ./data/dwellerd.sqlite in dev mode.
+# db:
+#   path: /var/lib/dwellerd/data/dwellerd.sqlite
+
+# Web client (Phase 4)
+web:
+  enabled: false
+  # host: 0.0.0.0
+  # port: 8765
+  # prefix: /dwellerd
+  # jwt:
+  #   secret: "..."           # required for auth — generate with `openssl rand -hex 32`
+  # user:                     # first-admin seed; consumed once into `users` table
+  #   username: admin
+  #   password_hash: "$2b$..."
+  # terminal:
+  #   enabled: false          # in-browser shell (sensitive — see TerminalAuditEntry)
