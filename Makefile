@@ -11,7 +11,7 @@ DWELLERD_HOME := /var/lib/dwellerd
 DWELLERD_ETC := /etc/dwellerd
 CLIENT_DIR := client
 
-.PHONY: help setup install run run-web run-bot ensure-perms fix-perms bootstrap-user preflight \
+.PHONY: help setup install run run-web run-bot reset-password ensure-perms fix-perms bootstrap-user preflight \
 	client-install client-dev client-build client-clean ensure-node \
 	install-service uninstall-service install-bot-service uninstall-bot-service \
 	install-cli uninstall-cli start stop restart status logs \
@@ -81,6 +81,12 @@ run-web: install ensure-perms
 run-bot: install
 	@if [ ! -f $(CONFIG) ]; then echo "$(CONFIG) не найден — запусти 'make setup'"; exit 1; fi
 	PYTHONPATH=server $(PY) -m bot
+
+# Сбросить пароль существующего юзера или создать нового. Спрашивает пароль
+# дважды (без эха), хэширует тем же bcrypt что и wizard, апдейтит users.
+reset-password:
+	@if [ -z "$(USER_NAME)" ]; then echo "usage: make reset-password USER_NAME=admin"; exit 1; fi
+	PYTHONPATH=server $(PY) deploy/scripts/reset-password.py "$(USER_NAME)" $(if $(CREATE),--create-if-missing,)
 
 # ── client (Next.js) — арендатор Этапа 5 ─────────────────────────────────
 
