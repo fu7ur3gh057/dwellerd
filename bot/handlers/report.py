@@ -34,16 +34,24 @@ async def cmd_report(message: Message) -> None:
     hostname = cfg.get("hostname") or socket.gethostname()
     lang = (cfg.get("lang") or "ru")
 
-    # build_report_context returns {hostname, lang, sections, targets} or None.
+    # We don't need the notifier-picking that build_report_context() does
+    # (the bot sends the rendered text itself via aiogram). Call the inner
+    # helper that just builds the section list — fewer prerequisites, no
+    # AppContext required.
     try:
-        from core.report import build_report_context  # type: ignore
+        from core.report import _build_sections  # type: ignore
         from core.report.builder import assemble  # type: ignore
     except ImportError:
         await message.answer("server/core не на PYTHONPATH — запусти через make run-bot.")
         return
 
-    rep = build_report_context(cfg, lang=lang, hostname=hostname)
-    if rep is None or not rep.get("sections"):
+    # `logs_enabled` controls whether RecentErrorsSection is included.
+    # The bot has DB access so we always include it when logs are configured.
+    settings_logs = (settings.logs if settings else None) or {}
+    logs_enabled = bool(settings_logs.get("sources"))
+
+    sections = _build_sections(cfg, lang=lang, logs_enabled=logs_enabled)
+    if not sections:
         await message.answer("Нечего рендерить — секции отчёта не настроены.")
         return
 
@@ -56,8 +64,8 @@ async def cmd_report(message: Message) -> None:
             log.exception("report section %s failed", type(s).__name__)
             return None
 
-    results = await asyncio.gather(*(_render(s) for s in rep["sections"]))
-    body = assemble(rep["hostname"], [r for r in results if r is not None], lang=lang)
+    results = await asyncio.gather(*(_render(s) for s in sections))
+    body = assemble(hostname, [r for r in results if r is not None], lang=lang)
 
     try:
         await notice.delete()
