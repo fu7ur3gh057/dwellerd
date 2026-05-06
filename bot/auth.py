@@ -44,16 +44,31 @@ def verify_credentials(username: str, password: str) -> User | None:
         return row
 
 
-def start_session(tg_user_id: int, user: User) -> None:
+def start_session(
+    tg_user_id: int,
+    user: User,
+    *,
+    access_token: str | None = None,
+    refresh_token: str | None = None,
+    expires_in: int | None = None,
+) -> None:
     """Upsert the bot_sessions row binding `tg_user_id` to `user.id`.
-    A subsequent /login from the same TG user replaces the row in place."""
+    A subsequent /login from the same TG user replaces the row in place.
+
+    Optional REST tokens are stashed alongside so privileged commands
+    can call the daemon's API without re-authenticating per request.
+    """
     now = time.time()
+    expires_at = now + int(expires_in) if expires_in else None
     with db_session() as s:
         existing = s.get(BotSession, tg_user_id)
         if existing is not None:
             existing.user_id = user.id
             existing.started_at = now
             existing.last_seen_at = now
+            existing.access_token = access_token
+            existing.refresh_token = refresh_token
+            existing.access_expires_at = expires_at
             s.add(existing)
         else:
             s.add(BotSession(
@@ -61,6 +76,9 @@ def start_session(tg_user_id: int, user: User) -> None:
                 user_id=user.id,
                 started_at=now,
                 last_seen_at=now,
+                access_token=access_token,
+                refresh_token=refresh_token,
+                access_expires_at=expires_at,
             ))
         s.commit()
 

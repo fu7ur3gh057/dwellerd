@@ -26,6 +26,7 @@ from rich.prompt import Confirm
 
 from .i18n import t
 from .paths import (
+    BOT_SERVICE_NAME, BOT_UNIT_PATH,
     DWELLERD_ETC, DWELLERD_HOME, DWELLERD_USER, DEV_CONFIG,
     EXAMPLE_CONFIG, PROD_CONFIG, PROJECT_ROOT, SERVICE_NAME, UNIT_PATH,
 )
@@ -84,7 +85,7 @@ def build_unit(*, venv_py: Path, as_root: bool) -> str:
 
     return f"""[Unit]
 Description=Dwellerd monitoring daemon
-Documentation=https://github.com/fu7ur3gh057/Dwellerd
+Documentation=https://github.com/fu7ur3gh057/dwellerd
 After=network-online.target docker.service
 Wants=network-online.target
 
@@ -95,6 +96,41 @@ Environment=PYTHONPATH={PROJECT_ROOT}/server
 ExecStart={venv_py} -m main {PROD_CONFIG}
 Restart=on-failure
 RestartSec=5s
+{rwpaths}
+[Install]
+WantedBy=multi-user.target
+"""
+
+
+# ── bot unit ───────────────────────────────────────────────────────────────
+
+
+def build_bot_unit(*, venv_py: Path, as_root: bool) -> str:
+    """Render `dwellerd-bot.service`. Wants= (not Requires=) on the main
+    daemon — the bot can start before the daemon, just won't get any data
+    until users / settings exist. Restart=on-failure handles transient
+    Telegram API drops.
+    """
+    if as_root:
+        user_lines = ""
+        rwpaths = ""
+    else:
+        user_lines = f"User={DWELLERD_USER}\nGroup={DWELLERD_USER}\n"
+        rwpaths = f"ReadWritePaths={DWELLERD_HOME}\nNoNewPrivileges=yes\n"
+
+    return f"""[Unit]
+Description=Dwellerd Telegram bot (aiogram)
+Documentation=https://github.com/fu7ur3gh057/dwellerd
+After=network-online.target {SERVICE_NAME}.service
+Wants=network-online.target {SERVICE_NAME}.service
+
+[Service]
+Type=simple
+{user_lines}WorkingDirectory={PROJECT_ROOT}
+Environment=PYTHONPATH={PROJECT_ROOT}/server
+ExecStart={venv_py} -m bot
+Restart=on-failure
+RestartSec=10s
 {rwpaths}
 [Install]
 WantedBy=multi-user.target
@@ -254,6 +290,101 @@ def uninstall_systemd(*, purge: bool = False) -> int:
                     ))
 
     console.print(f"\n[bold green]✓[/bold green] [bold]{t('service_removed')}[/bold]")
+    return 0
+
+
+# ── bot install / uninstall ────────────────────────────────────────────────
+
+
+def install_bot_systemd(*, as_root: bool = False) -> int:
+    """Install dwellerd-bot.service. Independent of the main daemon — bot
+    can be installed without the daemon (e.g. running daemon as foreground
+    in dev) but most setups will install both.
+    """
+    venv_py = PROJECT_ROOT / ".venv" / "bin" / "python"
+    if not venv_py.exists():
+        fail(t("venv_missing"))
+        return 1
+
+    from .ui import section
+    section(f"Bot service install — {BOT_SERVICE_NAME}")
+
+    if not as_root and not _user_exists(DWELLERD_USER):
+        fail(t("user_missing", user=DWELLERD_USER))
+        return 1
+
+    console.print(f"  [dim]project:[/dim]  [cyan]{PROJECT_ROOT}[/cyan]")
+    console.print(f"  [dim]unit:[/dim]     [cyan]{BOT_UNIT_PATH}[/cyan]")
+    console.print(f"  [dim]ExecStart:[/dim] [cyan]{venv_py} -m bot[/cyan]")
+
+    if not Confirm.ask(
+        f"\n[bold]install bot unit at {BOT_UNIT_PATH}?[/bold]", default=True,
+    ):
+        return 0
+
+    if not _ensure_sudo():
+        fail(t("sudo_failed"))
+        return 1
+
+    unit = build_bot_unit(venv_py=venv_py, as_root=as_root)
+    def write_unit():
+        subprocess.run(
+            ["sudo", "tee", str(BOT_UNIT_PATH)],
+            input=unit, text=True, check=True, stdout=subprocess.DEVNULL,
+        )
+    step("writing bot unit", write_unit)
+    step(t("step_reload"), lambda: subprocess.run(
+        ["sudo", "systemctl", "daemon-reload"], check=True,
+    ))
+    step(f"systemctl enable --now {BOT_SERVICE_NAME}", lambda: subprocess.run(
+        ["sudo", "systemctl", "enable", "--now", BOT_SERVICE_NAME], check=True,
+    ))
+
+    time.sleep(1)
+    rc = subprocess.run(
+        ["systemctl", "is-active", "--quiet", BOT_SERVICE_NAME],
+    ).returncode
+    if rc != 0:
+        warn_line(
+            f"bot unit started but is-active != 0; check "
+            f"`journalctl -u {BOT_SERVICE_NAME} -n 50`"
+        )
+
+    console.print(f"\n[bold green]✓[/bold green] bot service installed and started")
+    console.print(f"  [dim italic]logs:    sudo journalctl -u {BOT_SERVICE_NAME} -f[/dim italic]")
+    console.print(f"  [dim italic]status:  systemctl status {BOT_SERVICE_NAME}[/dim italic]")
+    return 0
+
+
+def uninstall_bot_systemd() -> int:
+    from .ui import section
+    section(f"Bot service uninstall — {BOT_SERVICE_NAME}")
+
+    if not BOT_UNIT_PATH.exists():
+        warn_line(t("no_service", path=str(BOT_UNIT_PATH)))
+        return 0
+
+    if not Confirm.ask(
+        f"[bold]stop and remove the bot unit?[/bold]", default=True,
+    ):
+        return 0
+
+    if not _ensure_sudo():
+        fail(t("sudo_failed"))
+        return 1
+
+    step(f"systemctl disable --now {BOT_SERVICE_NAME}", lambda: subprocess.run(
+        ["sudo", "systemctl", "disable", "--now", BOT_SERVICE_NAME],
+        check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    ))
+    step("removing bot unit file", lambda: subprocess.run(
+        ["sudo", "rm", "-f", str(BOT_UNIT_PATH)], check=True,
+    ))
+    step(t("step_reload"), lambda: subprocess.run(
+        ["sudo", "systemctl", "daemon-reload"], check=True,
+    ))
+
+    console.print(f"\n[bold green]✓[/bold green] bot service stopped and removed")
     return 0
 
 

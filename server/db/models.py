@@ -235,3 +235,37 @@ class BotSession(SQLModel, table=True):
     user_id: int = Field(foreign_key="users.id")
     started_at: float
     last_seen_at: float
+    # REST tokens cached at login time so bot can call privileged daemon
+    # endpoints (action commands like /run, /restart). Null when web is
+    # disabled — admin commands fall back to "REST not available" errors.
+    access_token: str | None = None
+    refresh_token: str | None = None
+    access_expires_at: float | None = None
+
+
+class BotSubscription(SQLModel, table=True):
+    """Per-TG-user push subscription.
+
+    A logged-in user opts in to having alerts / log events / per-check
+    results DM'd to them by the bot. The daemon's task layer (alerts,
+    logs.processor) writes events as usual; a small dispatcher in the
+    bot reads new rows from the source tables and forwards each match
+    to all subscribers.
+
+    `topic` is one of: 'alerts', 'logs', 'checks'.
+    `filter` is an optional narrowing — for 'checks' it's the check name,
+    for 'logs' it's the source name; null = all.
+    """
+
+    __tablename__ = "bot_subscriptions"
+    __table_args__ = (
+        Index("ix_bot_subscriptions_topic", "topic"),
+        Index("ix_bot_subscriptions_tg", "tg_user_id"),
+        {"sqlite_autoincrement": True},
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    tg_user_id: int = Field(index=True)
+    topic: str                              # 'alerts' | 'logs' | 'checks'
+    filter: str | None = None               # check name / log source / null
+    created_at: float

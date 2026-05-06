@@ -75,11 +75,31 @@ async def login_password(message: Message, state: FSMContext) -> None:
         )
         return
 
-    start_session(message.from_user.id, user)
+    # Also obtain REST tokens — required for admin actions (/run, /restart).
+    # Silent failure when web is disabled: bot still works, just without
+    # the action commands.
+    rest = None
+    try:
+        from ..api import rest_login
+        rest = await rest_login(username, password)
+    except Exception:
+        rest = None
+
+    if rest:
+        start_session(
+            message.from_user.id, user,
+            access_token=rest.get("access_token"),
+            refresh_token=rest.get("refresh_token"),
+            expires_in=rest.get("expires_in"),
+        )
+    else:
+        start_session(message.from_user.id, user)
+
+    rest_note = "" if rest else "\n<i>(web API не запущен — команды действий недоступны)</i>"
     await message.answer(
         f"✅ Привет, <b>{user.username}</b>!\n"
         f"Роль: <code>{user.role}</code>\n"
-        f"Команды: /help"
+        f"Команды: /help{rest_note}"
     )
 
 

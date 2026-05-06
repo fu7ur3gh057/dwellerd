@@ -38,4 +38,7 @@ DEV_DB_PATH = DEV_DATA_DIR / "dwellerd.sqlite"
 
 UNIT_PATH = Path(f"/etc/systemd/system/{SERVICE_NAME}.service")
 
+BOT_SERVICE_NAME = f"{SERVICE_NAME}-bot"
+BOT_UNIT_PATH = Path(f"/etc/systemd/system/{BOT_SERVICE_NAME}.service")
+
 WEB_PREFIX = "/dwellerd"

@@ -13,8 +13,9 @@ CLIENT_DIR := client
 
 .PHONY: help setup install run run-web run-bot ensure-perms fix-perms bootstrap-user preflight \
 	client-install client-dev client-build client-clean ensure-node \
-	install-service uninstall-service install-cli uninstall-cli \
-	start stop restart status logs clean
+	install-service uninstall-service install-bot-service uninstall-bot-service \
+	install-cli uninstall-cli start stop restart status logs \
+	bot-start bot-stop bot-restart bot-status bot-logs clean
 
 help:
 	@echo "Dwellerd — targets:"
@@ -29,12 +30,15 @@ help:
 	@echo "  make bootstrap-user     завести системного юзера '$(DWELLERD_USER)' + группы (sudo)"
 	@echo "  make preflight          проверить доступ '$(DWELLERD_USER)' к docker/journal/логам"
 	@echo ""
-	@echo "  make install-service    поставить systemd-юнит от '$(DWELLERD_USER)' (sudo)"
-	@echo "  make uninstall-service  остановить и удалить systemd-юнит (sudo)"
-	@echo "  make install-cli        поставить глобальную команду '$(SERVICE)' в ~/.local/bin"
-	@echo "  make uninstall-cli      удалить глобальную команду"
-	@echo "  make start | stop | restart | status | logs"
-	@echo "  make clean              убрать venv и __pycache__"
+	@echo "  make install-service        поставить systemd-юнит демона от '$(DWELLERD_USER)' (sudo)"
+	@echo "  make uninstall-service      остановить и удалить systemd-юнит демона (sudo)"
+	@echo "  make install-bot-service    поставить systemd-юнит бота '$(SERVICE)-bot' (sudo)"
+	@echo "  make uninstall-bot-service  остановить и удалить systemd-юнит бота (sudo)"
+	@echo "  make install-cli            поставить глобальную команду '$(SERVICE)' в ~/.local/bin"
+	@echo "  make uninstall-cli          удалить глобальную команду"
+	@echo "  make start | stop | restart | status | logs              — демон"
+	@echo "  make bot-start | bot-stop | bot-restart | bot-status | bot-logs   — бот"
+	@echo "  make clean                  убрать venv и __pycache__"
 
 $(VENV):
 	@bash -c '. deploy/scripts/_bootstrap.sh && ensure_venv "$$PWD"'
@@ -116,11 +120,20 @@ client-clean:
 
 # ── service ──────────────────────────────────────────────────────────────
 
+BOT_SERVICE := $(SERVICE)-bot
+BOT_UNIT_PATH := /etc/systemd/system/$(BOT_SERVICE).service
+
 install-service:
 	@bash deploy/scripts/install-service.sh
 
 uninstall-service:
 	@bash deploy/scripts/uninstall-service.sh
+
+install-bot-service:
+	@bash deploy/scripts/install-bot-service.sh
+
+uninstall-bot-service:
+	@bash deploy/scripts/uninstall-bot-service.sh
 
 install-cli:
 	@bash deploy/scripts/install-cli.sh
@@ -128,7 +141,7 @@ install-cli:
 uninstall-cli:
 	@rm -f $(HOME)/.local/bin/$(SERVICE) && echo "removed: $(HOME)/.local/bin/$(SERVICE)"
 
-# Graceful start/stop/restart — check unit exists first
+# Daemon — graceful start/stop/restart, only if unit exists
 start:
 	@if [ -f $(UNIT_PATH) ]; then sudo systemctl start $(SERVICE); else echo "$(SERVICE).service не установлен — запусти 'make install-service'"; fi
 stop:
@@ -139,6 +152,18 @@ status:
 	@if [ -f $(UNIT_PATH) ]; then systemctl status $(SERVICE) --no-pager; else echo "$(SERVICE).service не установлен"; fi
 logs:
 	@if [ -f $(UNIT_PATH) ]; then sudo journalctl -u $(SERVICE) -f; else echo "$(SERVICE).service не установлен"; fi
+
+# Bot — same shape
+bot-start:
+	@if [ -f $(BOT_UNIT_PATH) ]; then sudo systemctl start $(BOT_SERVICE); else echo "$(BOT_SERVICE).service не установлен — запусти 'make install-bot-service'"; fi
+bot-stop:
+	@if [ -f $(BOT_UNIT_PATH) ]; then sudo systemctl stop $(BOT_SERVICE); else echo "$(BOT_SERVICE).service не установлен — нечего останавливать"; fi
+bot-restart:
+	@if [ -f $(BOT_UNIT_PATH) ]; then sudo systemctl restart $(BOT_SERVICE); else echo "$(BOT_SERVICE).service не установлен — запусти 'make install-bot-service'"; fi
+bot-status:
+	@if [ -f $(BOT_UNIT_PATH) ]; then systemctl status $(BOT_SERVICE) --no-pager; else echo "$(BOT_SERVICE).service не установлен"; fi
+bot-logs:
+	@if [ -f $(BOT_UNIT_PATH) ]; then sudo journalctl -u $(BOT_SERVICE) -f; else echo "$(BOT_SERVICE).service не установлен"; fi
 
 clean:
 	rm -rf $(VENV)

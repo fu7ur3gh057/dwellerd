@@ -40,14 +40,19 @@ from wizard import (
 )
 from wizard.i18n import t
 from wizard.paths import DEV_CONFIG, PROD_CONFIG
+from wizard.service import install_bot_systemd, uninstall_bot_systemd
 
 
 def _parse() -> argparse.Namespace:
     p = argparse.ArgumentParser(prog="dwellerd-setup")
     p.add_argument("--install-service", action="store_true",
-                   help="skip menus, install systemd service directly")
+                   help="skip menus, install daemon systemd service directly")
     p.add_argument("--uninstall-service", action="store_true",
-                   help="stop, disable and remove systemd service")
+                   help="stop, disable and remove daemon systemd service")
+    p.add_argument("--install-bot-service", action="store_true",
+                   help="skip menus, install bot systemd service directly")
+    p.add_argument("--uninstall-bot-service", action="store_true",
+                   help="stop, disable and remove bot systemd service")
     p.add_argument("--purge", action="store_true",
                    help="with --uninstall-service: also remove user 'dwellerd', "
                         "/var/lib/dwellerd and /etc/dwellerd")
@@ -66,7 +71,8 @@ def main() -> int:
     if args.lang:
         set_lang(args.lang)
         banner(subtitle=t("subtitle"))
-    elif args.install_service or args.uninstall_service:
+    elif (args.install_service or args.uninstall_service
+          or args.install_bot_service or args.uninstall_bot_service):
         set_lang(detect_lang())
         banner(subtitle=t("subtitle"))
     else:
@@ -81,6 +87,17 @@ def main() -> int:
         except Exception:
             pass
         banner(subtitle=t("subtitle"))
+
+    if args.uninstall_bot_service:
+        return uninstall_bot_systemd()
+
+    if args.install_bot_service:
+        # The bot doesn't strictly need config.yaml at install time (it can
+        # read it later) but a missing config almost always means the user
+        # forgot to run the wizard — better to surface that here.
+        if not DEV_CONFIG.exists() and not PROD_CONFIG.exists():
+            run_wizard()
+        return install_bot_systemd(as_root=args.as_root)
 
     if args.uninstall_service:
         return uninstall_systemd(purge=args.purge)

@@ -18,6 +18,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 
 from .config import load_config
 from .db import init_db
+from .dispatch import run_dispatcher
 from .handlers import register_routers
 from .middlewares import register_middlewares
 
@@ -57,9 +58,18 @@ async def run() -> None:
     me = await bot.get_me()
     log.info("bot ready: @%s (id=%s)", me.username, me.id)
 
+    # Background fan-out: poll DB tables, push new alerts/logs/checks to
+    # subscribed TG users. Runs alongside polling, cancelled on shutdown.
+    dispatcher_task = asyncio.create_task(run_dispatcher(bot), name="dispatcher")
+
     try:
         await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
     finally:
+        dispatcher_task.cancel()
+        try:
+            await dispatcher_task
+        except asyncio.CancelledError:
+            pass
         await bot.session.close()
 
 
