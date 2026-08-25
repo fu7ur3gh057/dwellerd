@@ -1,0 +1,98 @@
+# Dwellerd configuration — the whole thing.
+#
+# `dwellerd setup` generates this for you; everything below is here so you
+# can edit it by hand afterwards. Restart the service to apply changes:
+#   sudo systemctl restart dwellerd
+#
+# Every field has a working default. The only two that have no sensible
+# default are the bot token and the chat id.
+
+telegram:
+  bot_token: "123456:ABC-DEF..."   # from @BotFather
+  chat_id: "123456789"             # your id from @userinfobot, or -100... for a group
+  lang: en                         # en | ru
+  # proxy: "socks5://127.0.0.1:1080"
+
+# Shown in every message, so you can tell your servers apart.
+hostname: my-server
+
+
+checks:
+  interval: 60          # seconds between every check
+
+  # Percentage checks. `warn` and `crit` are the levels at which an alert
+  # fires. Set a block to `false` to switch that check off entirely.
+  cpu:    { warn: 80, crit: 90 }
+  memory: { warn: 80, crit: 90 }
+  swap:   { warn: 50, crit: 80 }
+
+  # Load average, normalised per core — `warn: 2` means "twice as many
+  # runnable processes as this box has cores", on any box.
+  load:   { warn: 2, crit: 4 }
+
+  # Disks. A bare path is shorthand for the default thresholds.
+  disks:
+    - { path: "/", warn: 80, crit: 90 }
+    - "/var"
+    # - { path: "/mnt/backup", warn: 90, crit: 95 }
+
+  # HTTP probes. Anything other than `expect_status` — including a
+  # connection failure, a timeout or a TLS error — is a crit.
+  http:
+    - { name: site, url: "https://example.com", expect_status: 200 }
+    # - { name: api, url: "https://example.com/health", expect_status: 200, timeout: 5 }
+
+  # systemd units. Anything but `active` is a crit; `activating` is a warn.
+  systemd:
+    - nginx.service
+    # - postgresql.service
+
+  docker:
+    enabled: true
+    # Empty = watch every container `docker ps -a` reports. Listing them
+    # explicitly also catches a container that disappears entirely, which
+    # the open-ended mode cannot see.
+    containers: []
+    # containers: [app, db, redis]
+    #
+    # Compose files add every service they declare, so a service that never
+    # came up is still reported.
+    # compose:
+    #   - "/opt/myapp/docker-compose.yaml"
+
+
+logs:
+  enabled: true
+  notify: true            # false = keep capturing and digesting, no instant alerts
+
+  # The coarse filter applied on top of each source's own regex:
+  #   error — error / fatal / exception / traceback / panic / oom / …
+  #   warn  — the above plus warnings
+  #   info  — the above plus info and notice
+  #   all   — no filtering; the source's regex is the only gate
+  level: error
+
+  digest_interval: 3600   # seconds between digest messages
+  retention_days: 14      # how long log history is kept
+  max_rows: 200000        # FIFO safety belt against a log storm
+
+  # Each source is tailed from *now* — no history is replayed on startup.
+  # Near-identical lines are collapsed into one signature, so a failure that
+  # repeats 10 000 times is one alert plus a count in the digest.
+  sources:
+    - { type: docker_container, name: app, container: app, pattern: "ERROR|Traceback" }
+    - { type: file, name: nginx, path: "/var/log/nginx/error.log", pattern: "(?i)error" }
+    - { type: journal, name: sshd, unit: sshd.service, pattern: "(?i)fail" }
+    # - { type: docker, name: worker, compose: "/opt/app/docker-compose.yaml", service: worker }
+
+
+report:
+  enabled: true
+  interval: 10800         # every 3 hours: "the box is still alive, here it is"
+  # disks: ["/"]          # defaults to the disks watched above
+  # interfaces: [eth0]    # limit the network line to these NICs
+
+
+# Where the state database lives. Defaults to /var/lib/dwellerd/dwellerd.sqlite
+# under /etc/dwellerd/config.yaml, or ./data/ when running from a checkout.
+# db_path: "/var/lib/dwellerd/dwellerd.sqlite"

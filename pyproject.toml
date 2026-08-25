@@ -1,0 +1,9 @@
+[project]
+name = "dwellerd"
+version = "1.0.0"
+description = "A small systemd daemon that watches a Linux host and reports to Telegram."
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"

@@ -1,0 +1,5 @@
+# Runtime deps — deliberately tiny. No web framework, no ORM, no task queue.
+psutil>=5.9          # cpu / memory / swap / net counters
+PyYAML>=6.0          # config file
+httpx>=0.27          # telegram sendMessage + http checks
+rich>=13.7           # the setup wizard's terminal UI
