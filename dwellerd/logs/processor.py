@@ -27,6 +27,7 @@ import re
 import time
 from typing import TYPE_CHECKING, Callable, Awaitable
 
+from .redact import redact_secrets
 from .signature import compute_signature
 
 if TYPE_CHECKING:
@@ -147,6 +148,9 @@ class LogProcessor:
 
     async def _handle(self, source: str, line: str) -> None:
         ts = time.time()
+        # Never persist or notify with the original line: error messages often
+        # contain passwords, tokens, cookies or credentials embedded in URLs.
+        line = redact_secrets(line)
         sig = compute_signature(line, source)
         try:
             is_first = await asyncio.to_thread(

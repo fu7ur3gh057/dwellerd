@@ -68,6 +68,9 @@ drowning you while it does. Four mechanisms, all of them deliberate:
   strings become placeholders) and hashed. `connection refused id=1234` and
   `connection refused id=5678` are one kind of error: one alert, and a
   count in the digest.
+- **Secret redaction.** Passwords, tokens, authorization/cookie values, JWTs
+  and credentials embedded in URLs are replaced before a line is written to
+  SQLite or sent to Telegram.
 - **State that survives restarts.** All of the above lives in SQLite, so
   restarting the daemon does not re-announce everything currently wrong,
   and does not re-report errors it already told you about.

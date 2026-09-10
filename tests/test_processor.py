@@ -119,6 +119,26 @@ async def test_notify_false_captures_without_alerting(store):
     assert store.log_count_since(0) == 1
 
 
+async def test_secrets_are_redacted_before_storage_and_notification(store):
+    fired = []
+
+    async def on_first(source, sample):
+        fired.append(sample)
+
+    processor = LogProcessor(
+        storage=store, sources=[], level="all", on_first=on_first,
+    )
+    await processor._handle(
+        "app", "ERROR password=hunter2 token=secret-token-value",
+    )
+
+    sample = store.log_summary_since(0)[0]["sample"]
+    assert "hunter2" not in sample
+    assert "secret-token-value" not in sample
+    assert sample.count("<redacted>") == 2
+    assert fired and "hunter2" not in fired[0]
+
+
 async def test_digest_groups_and_ranks(store):
     lines = ["ERROR noisy id=1", "ERROR noisy id=2", "ERROR rare thing"]
     processor, _, digests = build(store, lines, level="error")
