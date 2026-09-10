@@ -3,6 +3,10 @@ Description=Dwellerd — host monitoring to Telegram
 Documentation=https://github.com/fu7ur3gh057/dwellerd
 After=network-online.target docker.service
 Wants=network-online.target
+# Five failed starts inside a minute means the config is broken, not that
+# the network blipped — stop hammering and leave the unit failed.
+StartLimitBurst=5
+StartLimitIntervalSec=60
 
 [Service]
 Type=simple
@@ -17,11 +21,6 @@ ExecStart=__INSTALL_DIR__/.venv/bin/python -m dwellerd run
 
 Restart=always
 RestartSec=10
-# Five failed starts inside a minute means the config is broken, not that
-# the network blipped — stop hammering and leave the unit failed so the
-# operator sees it.
-StartLimitBurst=5
-StartLimitIntervalSec=60
 
 # The daemon reads the whole host on purpose (disks, journal, docker), so
 # ProtectSystem / PrivateTmp are deliberately NOT set: they create a

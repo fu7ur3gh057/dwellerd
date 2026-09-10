@@ -53,7 +53,9 @@ else
       SUPP="${SUPP:+$SUPP }$group"
     fi
   done
-  SUPP_GROUPS="${SUPP// /,}"
+  # systemd's SupplementaryGroups= is whitespace-separated. A comma-joined
+  # value is interpreted as one literal group name and fails with 216/GROUP.
+  SUPP_GROUPS="$SUPP"
   info "groups: ${SUPP_GROUPS:-none}"
 fi
 
