@@ -209,7 +209,7 @@ class TelegramNotifier:
     def render_log_first(self, source: str, sample: str) -> str:
         label = _LABELS[self.lang]["log_first"]
         return self._with_footer(
-            f"🚨 <b>{label}</b>  ·  <code>{esc(source)}</code>\n\n"
+            f"🔴 <b>{label}</b>  ·  <code>{esc(source)}</code>\n\n"
             f"<pre>{esc(trunc(sample, 600))}</pre>"
         )
 

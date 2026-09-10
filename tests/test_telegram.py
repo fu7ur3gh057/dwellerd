@@ -58,7 +58,7 @@ def test_html_in_log_lines_is_escaped():
     text = notifier().render_log_first("app", "<script>alert(1)</script>")
     assert "<script>" not in text
     assert "&lt;script&gt;" in text
-    assert text.startswith("🚨 <b>New error</b>")
+    assert text.startswith("🔴 <b>New error</b>")
 
 
 def test_messages_without_hostname_have_no_timestamp_footer():
