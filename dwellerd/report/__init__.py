@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 import time
 
-from ..i18n import fmt_now, normalize_lang
+from ..i18n import normalize_lang
 from .sections import (
     ChecksSection, DockerSection, HostSection, LogsSection, SectionResult,
 )
@@ -112,7 +112,7 @@ class ReportBuilder:
 
     def _header(self) -> str:
         title = _TITLE.get(self.lang, _TITLE["en"])
-        line = f"🖥 <b>{title}</b>  ·  <i>{fmt_now(self.lang)}</i>"
+        line = f"🖥 <b>{title}</b>"
         if self.hostname:
             line += f"\n<i>{esc(self.hostname)}</i>"
         return f"{line}\n{_DIVIDER}"

@@ -15,7 +15,7 @@ import logging
 
 import httpx
 
-from ..i18n import fmt_now, normalize_lang
+from ..i18n import normalize_lang
 from .base import Alert
 
 log = logging.getLogger(__name__)
@@ -177,10 +177,12 @@ class TelegramNotifier:
     # ── message builders ─────────────────────────────────────────────────
 
     def _footer(self) -> str:
-        stamp = fmt_now(self.lang)
-        if self.hostname:
-            return f"<i>{esc(self.hostname)} · {stamp}</i>"
-        return f"<i>{stamp}</i>"
+        # Telegram already displays the delivery time next to every message.
+        return f"<i>{esc(self.hostname)}</i>" if self.hostname else ""
+
+    def _with_footer(self, body: str) -> str:
+        footer = self._footer()
+        return f"{body}\n\n{footer}" if footer else body
 
     def _body(self, alert: Alert) -> str:
         if alert.kind and alert.metrics:
@@ -199,18 +201,16 @@ class TelegramNotifier:
         icon = _LEVEL_ICON.get(alert.level, "⚠️")
         titles = _TITLES.get(self.lang, _TITLES["en"])
         title = titles.get((alert.kind, alert.level), alert.check)
-        return (
+        return self._with_footer(
             f"{icon} <b>{esc(title)}</b>\n\n"
-            f"{self._body(alert)}\n\n"
-            f"{self._footer()}"
+            f"{self._body(alert)}"
         )
 
     def render_log_first(self, source: str, sample: str) -> str:
         label = _LABELS[self.lang]["log_first"]
-        return (
-            f"📜 <b>{label}</b>  ·  <code>{esc(source)}</code>\n\n"
-            f"<pre>{esc(trunc(sample, 600))}</pre>\n"
-            f"{self._footer()}"
+        return self._with_footer(
+            f"🚨 <b>{label}</b>  ·  <code>{esc(source)}</code>\n\n"
+            f"<pre>{esc(trunc(sample, 600))}</pre>"
         )
 
     def render_log_digest(self, items: list[dict], period: str = "") -> str:
@@ -224,8 +224,7 @@ class TelegramNotifier:
                 f"\n📦 <code>{esc(item['source'])}</code>  ·  <b>{item['count']}×</b>\n"
                 f"<pre>{esc(trunc(item['sample'], 250))}</pre>"
             )
-        parts.append(f"\n{self._footer()}")
-        return "\n".join(parts)
+        return self._with_footer("\n".join(parts))
 
     # ── sending ──────────────────────────────────────────────────────────
 
@@ -234,11 +233,11 @@ class TelegramNotifier:
 
     async def send_startup(self) -> None:
         label = _LABELS[self.lang]["startup"]
-        await self.send_text(f"🟢 <b>{label}</b>\n\n{self._footer()}")
+        await self.send_text(self._with_footer(f"🟢 <b>{label}</b>"))
 
     async def send_shutdown(self) -> None:
         label = _LABELS[self.lang]["shutdown"]
-        await self.send_text(f"⏹ <b>{label}</b>\n\n{self._footer()}")
+        await self.send_text(self._with_footer(f"⏹ <b>{label}</b>"))
 
     async def send_log_first(self, source: str, sample: str) -> None:
         await self.send_text(self.render_log_first(source, sample))

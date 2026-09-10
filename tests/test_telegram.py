@@ -16,6 +16,8 @@ def test_crit_alert_reads_like_a_sentence():
     assert "Memory usage critical" in text
     assert "<b>95.2%</b>" in text
     assert "box-1" in text
+    assert text.endswith("<i>box-1</i>")
+    assert " · " not in text
 
 
 def test_recovery_uses_the_recovery_wording():
@@ -56,6 +58,13 @@ def test_html_in_log_lines_is_escaped():
     text = notifier().render_log_first("app", "<script>alert(1)</script>")
     assert "<script>" not in text
     assert "&lt;script&gt;" in text
+    assert text.startswith("🚨 <b>New error</b>")
+
+
+def test_messages_without_hostname_have_no_timestamp_footer():
+    plain = TelegramNotifier("token", "chat")
+    text = plain.render_log_first("app", "ERROR boom")
+    assert text.endswith("</pre>")
 
 
 def test_digest_lists_counts_per_source():
