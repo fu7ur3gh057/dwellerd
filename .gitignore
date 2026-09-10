@@ -4,6 +4,7 @@ __pycache__/
 /data/
 /logs/
 /config.yaml
+/config.yaml.bak-*
 .pytest_cache/
 .idea/
 .DS_Store
