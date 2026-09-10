@@ -24,6 +24,11 @@ __all__ = ["run_wizard"]
 _LOG_LEVELS = {"1": "error", "2": "warn", "3": "info", "4": "all"}
 
 
+def _choose_many(prompt: str, options: list[str], **kwargs) -> list[str]:
+    """Localized checkbox picker used by every wizard section."""
+    return choose_many(prompt, options, hint=t("multi_hint"), **kwargs)
+
+
 def run_wizard(target: Path) -> Path | None:
     """Walk every section and write the config. Returns the path written,
     or None if the operator backed out."""
@@ -145,7 +150,13 @@ def _disks() -> dict:
     section(t("sec_disks"))
     points = probe.mount_points()
     console.print(f"  [dim]{t('disks_found')}[/dim]")
-    chosen = choose_many(t("ask_disks"), points, default_all=True)
+    labels = []
+    for path in points:
+        space = probe.disk_space(path)
+        labels.append(t("disk_item", path=path, **space) if space else path)
+    chosen = _choose_many(
+        t("ask_disks"), points, default_all=True, display_options=labels,
+    )
     return {"disks": chosen or ["/"]}
 
 
@@ -155,7 +166,7 @@ def _services() -> dict:
     if probe.has_systemd() and confirm(t("ask_systemd_yn"), default=True):
         available = probe.systemd_units()
         if available:
-            units = choose_many(t("ask_systemd"), available)
+            units = _choose_many(t("ask_systemd"), available)
         else:
             warn("no running units found")
 
@@ -186,7 +197,7 @@ def _docker() -> dict:
     chosen: list[str] = []
     if found:
         console.print(f"  [dim]{t('containers_found')}[/dim]")
-        chosen = choose_many(t("ask_containers"), found)
+        chosen = _choose_many(t("ask_containers"), found)
     return {"docker_enabled": True, "docker_containers": chosen, "_containers": found}
 
 
@@ -203,7 +214,7 @@ def _logs(answers: dict) -> dict:
 
     containers = answers.get("_containers") or []
     if containers:
-        chosen = choose_many(t("ask_log_containers"), containers)
+        chosen = _choose_many(t("ask_log_containers"), containers)
         for name in chosen:
             sources.append({
                 "type": "docker_container", "name": name,
@@ -212,7 +223,7 @@ def _logs(answers: dict) -> dict:
 
     found_files = probe.log_files()
     if found_files:
-        for path in choose_many(t("ask_log_files"), found_files):
+        for path in _choose_many(t("ask_log_files"), found_files):
             sources.append({
                 "type": "file",
                 "name": Path(path).stem or path,

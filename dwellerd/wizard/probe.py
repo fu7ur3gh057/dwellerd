@@ -55,6 +55,22 @@ def mount_points() -> list[str]:
     return points
 
 
+def disk_space(path: str) -> dict[str, float] | None:
+    """Capacity figures for a mount point, in GiB. Best effort."""
+    try:
+        usage = shutil.disk_usage(path)
+    except OSError:
+        return None
+    gib = 1024 ** 3
+    percent = usage.used / usage.total * 100 if usage.total else 0.0
+    return {
+        "total": usage.total / gib,
+        "used": usage.used / gib,
+        "free": usage.free / gib,
+        "percent": percent,
+    }
+
+
 def has_docker() -> bool:
     return shutil.which("docker") is not None
 

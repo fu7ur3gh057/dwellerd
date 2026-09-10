@@ -6,11 +6,13 @@ circular dependency — callers pass already-translated strings in.
 """
 from __future__ import annotations
 
+import os
+import sys
 import time
 from typing import Callable
 
 from rich.align import Align
-from rich.console import Console
+from rich.console import Console, Group
 from rich.live import Live
 from rich.prompt import Confirm, Prompt
 from rich.spinner import Spinner
@@ -92,15 +94,9 @@ def confirm(prompt: str, default: bool = True) -> bool:
     return Confirm.ask(f"  {prompt}", default=default)
 
 
-def choose_many(prompt: str, options: list[str], default_all: bool = False) -> list[str]:
-    """Numbered multi-select. Accepts `1 3 5`, `1,3,5`, `all`, or empty for
-    none. Returns the chosen option strings."""
-    if not options:
-        return []
-    for index, option in enumerate(options, 1):
-        console.print(f"    [cyan]{index}[/cyan]. {option}")
-    hint = "all" if default_all else ""
-    raw = Prompt.ask(f"  {prompt}", default=hint).strip().lower()
+def _number_selection(raw: str, options: list[str]) -> list[str]:
+    """Parse the non-interactive fallback: ``1 3``, ``all`` or blank."""
+    raw = raw.strip().lower()
     if not raw:
         return []
     if raw in ("all", "*", "все"):
@@ -114,3 +110,104 @@ def choose_many(prompt: str, options: list[str], default_all: bool = False) -> l
         if 1 <= index <= len(options) and options[index - 1] not in picked:
             picked.append(options[index - 1])
     return picked
+
+
+def _picker_view(
+    prompt: str, labels: list[str], selected: set[int], cursor: int, hint: str,
+) -> Group:
+    """Render a cursor-centred window so long service lists fit a terminal."""
+    visible = max(5, min(len(labels), console.height - 7))
+    start = max(0, min(cursor - visible // 2, len(labels) - visible))
+    stop = min(len(labels), start + visible)
+
+    rows: list[Text] = [Text(f"  {prompt}", style="bold")]
+    if hint:
+        rows.append(Text(f"  {hint}", style="dim"))
+    if start:
+        rows.append(Text(f"    … {start}", style="dim"))
+    for index in range(start, stop):
+        active = index == cursor
+        checked = index in selected
+        row = Text("  › " if active else "    ", style="bold cyan" if active else "")
+        row.append("[●] " if checked else "[ ] ", style="green" if checked else "dim")
+        row.append(labels[index])
+        rows.append(row)
+    if stop < len(labels):
+        rows.append(Text(f"    … {len(labels) - stop}", style="dim"))
+    return Group(*rows)
+
+
+def _interactive_selection(
+    prompt: str, options: list[str], labels: list[str], default_all: bool,
+    hint: str,
+) -> list[str]:
+    """TTY checkbox picker: arrows/J/K, Space, A, Enter."""
+    import termios
+    import tty
+
+    fd = sys.stdin.fileno()
+    previous = termios.tcgetattr(fd)
+    cursor = 0
+    selected = set(range(len(options))) if default_all else set()
+    try:
+        tty.setcbreak(fd)
+        with Live(
+            _picker_view(prompt, labels, selected, cursor, hint),
+            console=console, auto_refresh=False, transient=False,
+        ) as live:
+            while True:
+                key = sys.stdin.read(1)
+                if key == "\x1b":
+                    # Arrow keys arrive as ESC + two characters. Read through
+                    # TextIO's own buffer; polling the underlying fd can miss
+                    # bytes Python has already buffered.
+                    sequence = sys.stdin.read(2)
+                    if sequence == "[A":
+                        cursor = (cursor - 1) % len(options)
+                    elif sequence == "[B":
+                        cursor = (cursor + 1) % len(options)
+                elif key in ("k", "K"):
+                    cursor = (cursor - 1) % len(options)
+                elif key in ("j", "J"):
+                    cursor = (cursor + 1) % len(options)
+                elif key == " ":
+                    if cursor in selected:
+                        selected.remove(cursor)
+                    else:
+                        selected.add(cursor)
+                elif key in ("a", "A"):
+                    selected = set() if len(selected) == len(options) \
+                        else set(range(len(options)))
+                elif key in ("\r", "\n"):
+                    break
+                live.update(
+                    _picker_view(prompt, labels, selected, cursor, hint), refresh=True,
+                )
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, previous)
+    return [option for index, option in enumerate(options) if index in selected]
+
+
+def choose_many(
+    prompt: str, options: list[str], default_all: bool = False,
+    display_options: list[str] | None = None, hint: str = "",
+) -> list[str]:
+    """Select multiple values with checkboxes, with a numeric fallback."""
+    if not options:
+        return []
+    labels = list(display_options or options)
+    if len(labels) != len(options):
+        raise ValueError("display_options must match options")
+
+    if os.name == "posix" and sys.stdin.isatty() and console.is_terminal:
+        try:
+            return _interactive_selection(prompt, options, labels, default_all, hint)
+        except (OSError, ValueError):
+            # Dumb or unusual TTY: the old numbered input remains usable.
+            pass
+
+    for index, label in enumerate(labels, 1):
+        console.print(f"    [cyan]{index}[/cyan]. {label}")
+    hint = "all" if default_all else ""
+    raw = Prompt.ask(f"  {prompt} [1 3 / all]", default=hint)
+    return _number_selection(raw, options)

@@ -28,11 +28,13 @@ _STRINGS: dict[str, dict[str, str]] = {
 
         "sec_disks": "Disks",
         "disks_found": "Mount points found:",
-        "ask_disks": "Which to watch (numbers, or 'all')",
+        "ask_disks": "Select mount points to watch",
+        "disk_item": "{path} — {used:.1f}/{total:.1f} GB used ({percent:.0f}%), {free:.1f} GB free",
+        "multi_hint": "↑/↓ move · Space select · A all · Enter confirm",
 
         "sec_services": "Services",
         "ask_systemd_yn": "Watch systemd units?",
-        "ask_systemd": "Which units (numbers, or 'all')",
+        "ask_systemd": "Select systemd units",
         "ask_http_yn": "Watch HTTP endpoints?",
         "ask_http_url": "URL (blank to stop adding)",
         "ask_http_status": "Expected status code",
@@ -41,14 +43,13 @@ _STRINGS: dict[str, dict[str, str]] = {
         "docker_missing": "docker not found — skipping this section",
         "ask_docker_yn": "Watch docker containers?",
         "containers_found": "Containers found:",
-        "ask_containers": "Which to watch (numbers, 'all', or blank for "
-                          "everything docker reports)",
+        "ask_containers": "Select containers (none = watch everything)",
 
         "sec_logs": "Logs",
         "ask_logs_yn": "Collect logs and report new errors?",
         "ask_log_level": "Which lines count as errors [1] error  [2] warn  "
                          "[3] info  [4] everything",
-        "ask_log_containers": "Read logs from which containers (numbers, or 'all')",
+        "ask_log_containers": "Select containers whose logs to read",
         "ask_log_files": "Log file path (blank to stop adding)",
         "ask_log_pattern": "Regex to match (blank = the level filter only)",
         "ask_digest": "Digest interval, seconds",
@@ -93,11 +94,13 @@ _STRINGS: dict[str, dict[str, str]] = {
 
         "sec_disks": "Диски",
         "disks_found": "Найденные точки монтирования:",
-        "ask_disks": "За какими следить (номера или 'all')",
+        "ask_disks": "Выберите точки монтирования",
+        "disk_item": "{path} — занято {used:.1f}/{total:.1f} ГБ ({percent:.0f}%), свободно {free:.1f} ГБ",
+        "multi_hint": "↑/↓ перемещение · Space выбор · A выбрать все · Enter подтвердить",
 
         "sec_services": "Сервисы",
         "ask_systemd_yn": "Следить за systemd-юнитами?",
-        "ask_systemd": "За какими (номера или 'all')",
+        "ask_systemd": "Выберите systemd-юниты",
         "ask_http_yn": "Следить за HTTP-эндпоинтами?",
         "ask_http_url": "URL (пусто — закончить)",
         "ask_http_status": "Ожидаемый статус",
@@ -106,14 +109,13 @@ _STRINGS: dict[str, dict[str, str]] = {
         "docker_missing": "docker не найден — пропускаю раздел",
         "ask_docker_yn": "Следить за docker-контейнерами?",
         "containers_found": "Найденные контейнеры:",
-        "ask_containers": "За какими следить (номера, 'all', или пусто — "
-                          "за всеми, что покажет docker)",
+        "ask_containers": "Выберите контейнеры (ничего = следить за всеми)",
 
         "sec_logs": "Логи",
         "ask_logs_yn": "Собирать логи и сообщать о новых ошибках?",
         "ask_log_level": "Что считать ошибкой [1] error  [2] warn  "
                          "[3] info  [4] всё подряд",
-        "ask_log_containers": "С каких контейнеров читать логи (номера или 'all')",
+        "ask_log_containers": "Выберите контейнеры, чьи логи читать",
         "ask_log_files": "Путь к лог-файлу (пусто — закончить)",
         "ask_log_pattern": "Regex для фильтра (пусто = только фильтр уровня)",
         "ask_digest": "Интервал дайджеста, секунд",
