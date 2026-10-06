@@ -26,6 +26,7 @@ def decide_transition(prev: str | None, current: str) -> str | None:
         return None
     if current == "ok":
         return "ok"
-    if _SEVERITY[current] > _SEVERITY[prev]:
+    # An unrecognised level counts as the worst, so it can never be silent.
+    if _SEVERITY.get(current, 2) > _SEVERITY.get(prev, 2):
         return current
     return None

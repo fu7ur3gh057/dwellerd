@@ -284,15 +284,19 @@ class ChecksSection:
     async def render(self) -> SectionResult:
         L = labels(self.lang)
         states = await asyncio.to_thread(self.storage.all_states)
-        bad = [s for s in states if s["level"] != "ok"]
+        # The confirmed level is what the operator has been told about; the
+        # raw `level` can be a one-tick spike that the alert gate ignored.
+        for s in states:
+            s["shown"] = s.get("confirmed") or s["level"]
+        bad = [s for s in states if s["shown"] != "ok"]
         if not bad:
             return SectionResult(text=f"{L['checks']}: {L['all_ok']} ({len(states)})")
         now = time.time()
         lines = [f"{L['checks']}: {len(bad)}/{len(states)}"]
         warnings = []
         for state in bad:
-            icon = "🔴" if state["level"] == "crit" else "🟡"
+            icon = "🔴" if state["shown"] == "crit" else "🟡"
             since = fmt_duration(now - state["since"], self.lang)
             lines.append(f"{icon} {state['name']} — {state['last_detail']} ({since})")
-            warnings.append(f"{state['name']} {state['level']}")
+            warnings.append(f"{state['name']} {state['shown']}")
         return SectionResult(text="\n".join(lines), warnings=warnings)

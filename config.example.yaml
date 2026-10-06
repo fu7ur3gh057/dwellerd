@@ -13,6 +13,14 @@ telegram:
   lang: en                         # en | ru
   # proxy: "socks5://127.0.0.1:1080"
 
+  # Buttons under alerts (🔕 Mute, 👍 Got it) and the /mute /unmute /mutes /ack
+  # commands. This is the only part that listens: it polls Telegram, which
+  # means one process per bot token. false = push-only, no buttons.
+  interactive: true
+  # Telegram user ids allowed to press them (ask @userinfobot). Empty means
+  # anyone in the chat above — fine for a private chat, risky in a big group.
+  # admins: [123456789]
+
 # Shown in every message, so you can tell your servers apart.
 hostname: my-server
 
@@ -59,6 +67,35 @@ checks:
     # came up is still reported.
     # compose:
     #   - "/opt/myapp/docker-compose.yaml"
+
+
+# How a raw check result becomes a message. These are the knobs that decide
+# how loud the daemon is; the defaults are the quiet ones.
+alerts:
+  # A change of level only counts after this many consecutive checks agree.
+  # One CPU spike or one dropped HTTP request is not an incident. With the
+  # default interval, 2 means a problem is announced within ~2 minutes.
+  # Set 1 to alert on the very first bad reading.
+  confirm: 2
+
+  # Percent *below* a threshold a value must fall before it counts as
+  # recovered: with warn 80 and hysteresis 5, 77% still holds the alert,
+  # 75% clears it. Stops a check hovering at the line from flapping.
+  # 0 = recover the instant the value crosses back.
+  hysteresis: 5
+
+  # A crit that is still unresolved after this many seconds is announced
+  # again ("still unresolved after 6h"), then every interval after that.
+  # 0 = never repeat.
+  remind_after: 21600
+
+  # Alerts that fire within this many seconds of each other go out as one
+  # message. 0 = always one message per alert.
+  group_window: 5
+
+  # During this daily window (server local time) only `crit` alerts make a
+  # sound; everything else is still delivered, silently. Quote the times.
+  # quiet_hours: { start: "23:00", end: "07:00" }
 
 
 logs:

@@ -11,6 +11,7 @@ Path priority: $DWELLERD_CONFIG, then /etc/dwellerd/config.yaml, then
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -46,6 +47,13 @@ class TelegramConfig:
     chat_id: str = ""
     lang: str = "en"
     proxy: str = ""
+    # Buttons under alerts and the /mute /ack commands. Needs the daemon to
+    # poll Telegram for replies; false keeps it push-only.
+    interactive: bool = True
+    # Telegram user ids allowed to press buttons and send commands. Empty =
+    # anyone in the configured chat, which is right for a private chat and a
+    # small team group, and wrong for a big one.
+    admins: list[str] = field(default_factory=list)
 
     @property
     def configured(self) -> bool:
@@ -87,6 +95,31 @@ class DockerConfig:
     enabled: bool = False
     containers: list[str] = field(default_factory=list)
     compose: list[str] = field(default_factory=list)
+
+
+@dataclass
+class QuietHours:
+    """A daily window (local time) in which only `crit` alerts make a sound.
+    Everything else is still delivered, just without a notification."""
+    start: int = 0              # minutes since midnight
+    end: int = 0
+
+    def contains(self, minute: int) -> bool:
+        if self.start == self.end:
+            return False
+        if self.start < self.end:
+            return self.start <= minute < self.end
+        return minute >= self.start or minute < self.end     # wraps midnight
+
+
+@dataclass
+class AlertsConfig:
+    """How raw check results become messages."""
+    confirm: int = 2                # consecutive observations before a change counts
+    hysteresis: float = 5.0         # % below a threshold before it counts as recovered
+    remind_after: float = 21600.0   # re-announce a crit that lasts this long (0 = off)
+    group_window: float = 5.0       # seconds to collect simultaneous alerts (0 = off)
+    quiet: QuietHours | None = None
 
 
 @dataclass
@@ -143,6 +176,7 @@ class Config:
     telegram: TelegramConfig = field(default_factory=TelegramConfig)
     hostname: str = ""
     checks: ChecksConfig = field(default_factory=ChecksConfig)
+    alerts: AlertsConfig = field(default_factory=AlertsConfig)
     logs: LogsConfig = field(default_factory=LogsConfig)
     report: ReportConfig = field(default_factory=ReportConfig)
     db_path: str = ""
@@ -235,6 +269,48 @@ def _log_sources(raw) -> list[LogSourceConfig]:
     return out
 
 
+_HHMM = re.compile(r"^([01]?\d|2[0-3]):([0-5]\d)$")
+
+
+def parse_clock(value) -> int | None:
+    """"23:00" -> minutes since midnight, or None if it is not a time.
+
+    PyYAML reads an unquoted `23:00` as a base-60 integer (23*60 + 0), so
+    an int in 0..1439 is already minutes-since-midnight and is accepted
+    as-is. Quoting the value is still the safer thing to write.
+    """
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value if 0 <= value < 1440 else None
+    m = _HHMM.match(str(value).strip())
+    if not m:
+        return None
+    return int(m.group(1)) * 60 + int(m.group(2))
+
+
+def _quiet(raw) -> QuietHours | None:
+    if not isinstance(raw, dict):
+        return None
+    start, end = parse_clock(raw.get("start")), parse_clock(raw.get("end"))
+    if start is None or end is None or start == end:
+        return None
+    return QuietHours(start=start, end=end)
+
+
+def _alerts(raw) -> AlertsConfig:
+    d = AlertsConfig()
+    if not isinstance(raw, dict):
+        return d
+    return AlertsConfig(
+        confirm=max(1, int(_f(raw, "confirm", d.confirm))),
+        hysteresis=min(50.0, max(0.0, float(_f(raw, "hysteresis", d.hysteresis)))),
+        remind_after=max(0.0, float(_f(raw, "remind_after", d.remind_after))),
+        group_window=min(60.0, max(0.0, float(_f(raw, "group_window", d.group_window)))),
+        quiet=_quiet(raw.get("quiet_hours")),
+    )
+
+
 def parse(raw: dict, source: Path | None = None) -> Config:
     raw = raw or {}
     cfg = Config(source_path=source)
@@ -245,6 +321,8 @@ def parse(raw: dict, source: Path | None = None) -> Config:
         chat_id=str(_f(tg, "chat_id", "")),
         lang=str(_f(tg, "lang", "en")),
         proxy=str(_f(tg, "proxy", "")),
+        interactive=bool(_f(tg, "interactive", True)),
+        admins=[str(a) for a in (_f(tg, "admins", []) or [])],
     )
 
     cfg.hostname = str(_f(raw, "hostname", ""))
@@ -269,6 +347,8 @@ def parse(raw: dict, source: Path | None = None) -> Config:
         ),
     )
 
+    cfg.alerts = _alerts(raw.get("alerts"))
+
     lg = _f(raw, "logs", {}) or {}
     cfg.logs = LogsConfig(
         enabled=bool(_f(lg, "enabled", True)),
@@ -291,7 +371,8 @@ def parse(raw: dict, source: Path | None = None) -> Config:
     return cfg
 
 
-def load(path: Path | None = None) -> Config:
+def read_raw(path: Path | None = None) -> tuple[dict, Path]:
+    """The YAML as a plain dict, plus the path it came from."""
     path = path or config_path()
     if not path.exists():
         raise FileNotFoundError(
@@ -299,4 +380,11 @@ def load(path: Path | None = None) -> Config:
         )
     with open(path, "r", encoding="utf-8") as f:
         raw = yaml.safe_load(f) or {}
+    if not isinstance(raw, dict):
+        raise ValueError("the config must be a YAML mapping at the top level")
+    return raw, path
+
+
+def load(path: Path | None = None) -> Config:
+    raw, path = read_raw(path)
     return parse(raw, source=path)

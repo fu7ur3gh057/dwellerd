@@ -5,7 +5,10 @@
     check     run every check once, print the results, exit
     test      send a test message to the configured chat
     report    build the periodic report now and send it
-    config    print the resolved config path and a summary
+    config    print the resolved config path and a summary (--validate to lint it)
+    mute      silence alerts for a while:  dwellerd mute 2h [pattern]
+    unmute    lift one mute, or all of them
+    mutes     list the active mutes
 """
 from __future__ import annotations
 
@@ -46,6 +49,41 @@ def _load(path: str | None):
         raise SystemExit(2)
 
 
+def _raw_problems(path: str | None):
+    """Validation problems for the config file, or None if it cannot even
+    be read (the caller has already reported that)."""
+    from .config import read_raw
+    from .validate import validate
+    try:
+        raw, _ = read_raw(Path(path) if path else None)
+    except Exception:
+        return None
+    return validate(raw)
+
+
+def _log_config_problems(cfg) -> None:
+    """At startup, surface config problems in the journal without refusing
+    to start: the daemon has always tolerated a bad entry by skipping it."""
+    problems = _raw_problems(str(cfg.source_path) if cfg.source_path else None)
+    log = logging.getLogger("dwellerd")
+    for problem in problems or []:
+        (log.error if problem.level == "error" else log.warning)(
+            "config: %s", problem,
+        )
+
+
+def _open_storage(args):
+    from .storage import Storage
+    cfg = _load(args.config)
+    storage = Storage(cfg.db)
+    try:
+        storage.connect()
+    except RuntimeError as e:
+        print(f"error: {e}", file=sys.stderr)
+        raise SystemExit(2)
+    return cfg, storage
+
+
 # ── commands ─────────────────────────────────────────────────────────────
 
 
@@ -70,6 +108,7 @@ def cmd_run(args) -> int:
         "dwellerd %s starting — config %s, db %s",
         __version__, cfg.source_path, cfg.db,
     )
+    _log_config_problems(cfg)
     try:
         asyncio.run(run(cfg))
     except KeyboardInterrupt:
@@ -171,6 +210,9 @@ def cmd_report(args) -> int:
 def cmd_config(args) -> int:
     from .config import config_path
 
+    if args.validate:
+        return _cmd_validate(args)
+
     cfg = _load(args.config)
     checks = cfg.checks
     print(f"config:    {cfg.source_path or config_path()}")
@@ -188,6 +230,103 @@ def cmd_config(args) -> int:
           f" — {len(cfg.logs.sources)} source(s), level {cfg.logs.level}")
     print(f"report:    {'on' if cfg.report.enabled else 'off'}"
           f" every {cfg.report.interval:.0f}s")
+    a = cfg.alerts
+    quiet = "off"
+    if a.quiet is not None:
+        quiet = (f"{a.quiet.start // 60:02d}:{a.quiet.start % 60:02d}"
+                 f"-{a.quiet.end // 60:02d}:{a.quiet.end % 60:02d}")
+    print(f"alerts:    confirm {a.confirm}x, hysteresis {a.hysteresis:g}%,"
+          f" remind crit every {a.remind_after:.0f}s (0 = off),"
+          f" group {a.group_window:g}s, quiet hours {quiet}")
+    return 0
+
+
+def _cmd_validate(args) -> int:
+    """Lint the config file. Exit 0 = fine (warnings allowed), 2 = errors."""
+    from .config import config_path, parse, read_raw
+    from .validate import errors, validate
+
+    target = Path(args.config) if args.config else config_path()
+    try:
+        raw, path = read_raw(target)
+    except FileNotFoundError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 2
+    except Exception as e:
+        print(f"error: cannot read the config: {e}", file=sys.stderr)
+        return 2
+
+    problems = validate(raw)
+    for problem in problems:
+        print(f"  {problem}")
+    bad = errors(problems)
+    if not bad:
+        # Everything the validator knows about passed; make sure the real
+        # parser agrees before declaring the file good.
+        try:
+            parse(raw, source=path)
+        except Exception as e:
+            print(f"  error: {type(e).__name__}: {e}")
+            bad = [e]
+    warnings = len(problems) - len(errors(problems))
+    if bad:
+        print(f"{path}: INVALID — {len(bad)} error(s), {warnings} warning(s)")
+        return 2
+    print(f"{path}: OK" + (f" — {warnings} warning(s)" if warnings else ""))
+    return 0
+
+
+def cmd_mute(args) -> int:
+    import time
+    from .duration import parse_duration
+
+    try:
+        seconds = parse_duration(args.duration)
+    except ValueError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 2
+    pattern = args.pattern or "*"
+    cfg, storage = _open_storage(args)
+    try:
+        until = time.time() + seconds
+        storage.add_mute(pattern, until)
+    finally:
+        storage.close()
+    when = time.strftime("%Y-%m-%d %H:%M", time.localtime(until))
+    print(f"muted {pattern!r} until {when}")
+    if pattern == "*":
+        print("(every check alert and every new-error alert; the digest and "
+              "the periodic report still arrive)")
+    return 0
+
+
+def cmd_unmute(args) -> int:
+    cfg, storage = _open_storage(args)
+    try:
+        n = storage.remove_mute(args.pattern)
+    finally:
+        storage.close()
+    what = repr(args.pattern) if args.pattern else "all mutes"
+    print(f"removed {what}" if n else f"nothing to remove for {what}")
+    return 0
+
+
+def cmd_mutes(args) -> int:
+    import time
+
+    cfg, storage = _open_storage(args)
+    try:
+        mutes = storage.active_mutes()
+    finally:
+        storage.close()
+    if not mutes:
+        print("no active mutes")
+        return 0
+    now = time.time()
+    from .i18n import fmt_duration
+    for m in mutes:
+        until = time.strftime("%Y-%m-%d %H:%M", time.localtime(m["until"]))
+        print(f"  {m['pattern']:<24} until {until}  ({fmt_duration(m['until'] - now)} left)")
     return 0
 
 
@@ -216,13 +355,29 @@ def build_parser() -> argparse.ArgumentParser:
     report.add_argument("--print", action="store_true",
                         help="print to stdout instead of sending")
 
-    sub.add_parser("config", help="show the resolved configuration")
+    config = sub.add_parser("config", help="show the resolved configuration")
+    config.add_argument("--validate", action="store_true",
+                        help="check the config file for mistakes and exit")
+
+    mute = sub.add_parser(
+        "mute", help="silence alerts for a while (e.g. `mute 2h`, `mute 30m 'docker:*'`)",
+    )
+    mute.add_argument("duration", help="30m, 2h, 1d, 1h30m")
+    mute.add_argument("pattern", nargs="?", default="*",
+                      help="alert name or glob: cpu, 'disk-*', 'docker:*', "
+                           "'log:*' (default: everything)")
+
+    unmute = sub.add_parser("unmute", help="lift a mute (all of them if no pattern)")
+    unmute.add_argument("pattern", nargs="?", default=None)
+
+    sub.add_parser("mutes", help="list active mutes")
     return parser
 
 
 _COMMANDS = {
     "setup": cmd_setup, "run": cmd_run, "check": cmd_check,
     "test": cmd_test, "report": cmd_report, "config": cmd_config,
+    "mute": cmd_mute, "unmute": cmd_unmute, "mutes": cmd_mutes,
 }
 
 

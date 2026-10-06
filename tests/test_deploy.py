@@ -19,3 +19,11 @@ def test_supplementary_groups_remain_whitespace_separated():
 
     assert 'SUPP_GROUPS="$SUPP"' in text
     assert 'SUPP_GROUPS="${SUPP// /,}"' not in text
+
+
+def test_unit_can_be_reloaded_with_sighup():
+    # `systemctl reload` must send SIGHUP to the daemon, not just fail with
+    # "job type reload is not applicable".
+    text = (ROOT / "deploy/dwellerd.service").read_text()
+    service = text.split("[Service]", 1)[1]
+    assert "ExecReload=/bin/kill -HUP $MAINPID" in service

@@ -9,8 +9,8 @@ PY       := $(VENV)/bin/python
 PIP      := $(VENV)/bin/pip
 ROOT     := $(shell pwd)
 
-.PHONY: help venv setup run check test-alert report config \
-        install uninstall purge start stop restart status logs \
+.PHONY: help venv setup run check test-alert report config validate \
+        install uninstall purge start stop restart reload status logs \
         test lint clean
 
 help:
@@ -20,6 +20,7 @@ help:
 	@echo "  Setup"
 	@echo "    make setup        interactive wizard — writes config.yaml"
 	@echo "    make config       show the resolved configuration"
+	@echo "    make validate     check the config file for mistakes"
 	@echo ""
 	@echo "  Run"
 	@echo "    make run          run in the foreground (Ctrl-C to stop)"
@@ -31,7 +32,7 @@ help:
 	@echo "    sudo make install     install + start the systemd unit"
 	@echo "    sudo make uninstall   stop + remove the unit"
 	@echo "    sudo make purge       uninstall and delete the user, config and data"
-	@echo "    make start|stop|restart|status|logs"
+	@echo "    make start|stop|restart|reload|status|logs"
 	@echo ""
 	@echo "  Development"
 	@echo "    make test         run the test suite"
@@ -63,6 +64,9 @@ report: venv
 config: venv
 	@$(PY) -m dwellerd config
 
+validate: venv
+	@$(PY) -m dwellerd config --validate
+
 install:
 	@bash deploy/install.sh $(ARGS)
 
@@ -80,6 +84,9 @@ stop:
 
 restart:
 	@sudo systemctl restart $(SERVICE)
+
+reload:
+	@sudo systemctl reload $(SERVICE)
 
 status:
 	@systemctl status $(SERVICE) --no-pager || true

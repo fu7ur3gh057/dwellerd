@@ -18,6 +18,9 @@ WorkingDirectory=__INSTALL_DIR__
 Environment=PYTHONUNBUFFERED=1
 Environment=DWELLERD_CONFIG=/etc/dwellerd/config.yaml
 ExecStart=__INSTALL_DIR__/.venv/bin/python -m dwellerd run
+# `systemctl reload dwellerd` re-reads the config without a restart. A config
+# that fails validation is refused and the running one stays in force.
+ExecReload=/bin/kill -HUP $MAINPID
 
 Restart=always
 RestartSec=10

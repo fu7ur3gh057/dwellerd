@@ -88,7 +88,7 @@ class LoadCheck:
         else:
             level, threshold = "ok", self.warn
         return Result(
-            level=level, kind="load",
+            level=level, kind="load", ladder=(per_core, self.warn, self.crit),
             metrics={**extra, "value": per_core, "threshold": threshold},
             detail=f"load {load1:.2f} ({per_core:.2f}/core, {self.cores} cores)",
         )

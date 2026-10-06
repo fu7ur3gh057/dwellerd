@@ -16,6 +16,9 @@ class Result:
     detail: str = ""            # plain-text fallback line
     kind: str = ""              # cpu | memory | swap | load | disk | http | systemd | docker
     metrics: dict = field(default_factory=dict)
+    # (value, warn, crit) for threshold-style checks. The alert gate uses it
+    # to apply hysteresis; checks without a threshold leave it None.
+    ladder: tuple[float, float, float] | None = None
 
 
 class Check(Protocol):
@@ -33,16 +36,16 @@ def by_threshold(
     base = {"value": pct, "threshold": warn, **(extra or {})}
     if pct >= crit:
         return Result(
-            level="crit", kind=kind,
+            level="crit", kind=kind, ladder=(pct, warn, crit),
             metrics={**base, "threshold": crit},
             detail=f"{label} {pct:.1f}{unit} >= {crit:.0f}{unit}",
         )
     if pct >= warn:
         return Result(
-            level="warn", kind=kind, metrics=base,
+            level="warn", kind=kind, metrics=base, ladder=(pct, warn, crit),
             detail=f"{label} {pct:.1f}{unit} >= {warn:.0f}{unit}",
         )
     return Result(
-        level="ok", kind=kind, metrics=base,
+        level="ok", kind=kind, metrics=base, ladder=(pct, warn, crit),
         detail=f"{label} {pct:.1f}{unit}",
     )
